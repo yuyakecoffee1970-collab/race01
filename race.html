@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>10頭立て白熱競馬レース</title>
+    <style>
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f0f3f5;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+
+        /* コントロールエリア */
+        .controls {
+            margin-bottom: 20px;
+        }
+
+        button {
+            font-size: 18px;
+            font-weight: bold;
+            padding: 10px 25px;
+            background-color: #27ae60;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.2s;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        button:hover {
+            background-color: #219653;
+        }
+
+        button:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+
+        /* レーストラックのコンテナ */
+        .track-container {
+            position: relative;
+            width: 800px;
+            background-color: #2ecc71; /* 芝生の色 */
+            border: 4px solid #27ae60;
+            border-radius: 8px;
+            padding: 10px 0;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.15);
+            overflow: hidden;
+        }
+
+        /* 各レーン */
+        .lane {
+            position: relative;
+            height: 45px;
+            border-bottom: 1px dashed rgba(255, 255, 255, 0.5);
+            display: flex;
+            align-items: center;
+        }
+
+        .lane:last-child {
+            border-bottom: none;
+        }
+
+        /* レーン番号 */
+        .lane-number {
+            width: 40px;
+            text-align: center;
+            font-weight: bold;
+            color: white;
+            background-color: rgba(0, 0, 0, 0.3);
+            padding: 2px 0;
+            font-size: 14px;
+            z-index: 2;
+        }
+
+        /* 馬のオブジェクト */
+        .horse {
+            position: absolute;
+            left: 45px; /* スタート位置 */
+            font-size: 28px;
+            transition: left 0.1s linear; /* 滑らかな動きのためのアニメーション */
+            white-space: nowrap;
+            user-select: none;
+            z-index: 2;
+            transform: scaleX(-1)
+        }
+
+        /* ゴールライン */
+        .goal-line {
+            position: absolute;
+            right: 60px; /* 右端から60pxの位置 */
+            top: 0;
+            bottom: 0;
+            width: 6px;
+            background: repeating-linear-gradient(
+                0deg,
+                #fff,
+                #fff 10px,
+                #000 10px,
+                #000 20px
+            ); /* 白黒のチェッカーフラッグ柄 */
+            z-index: 1;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.2);
+        }
+
+        /* 結果発表エリア */
+        .result-board {
+            margin-top: 25px;
+            width: 400px;
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            text-align: center;
+            display: none; /* 初期状態は非表示 */
+        }
+
+        .result-board h2 {
+            margin-top: 0;
+            color: #e74c3c;
+        }
+
+        .rank-list {
+            list-style: none;
+            padding: 0;
+            font-size: 20px;
+            font-weight: bold;
+        }
+
+        .rank-list li {
+            margin: 8px 0;
+            padding: 5px;
+            border-radius: 4px;
+        }
+
+        .rank-1 { color: #d4af37; background-color: #fdfaf0; font-size: 24px; } /* 金 */
+        .rank-2 { color: #7f8c8d; background-color: #f5f7f8; } /* 銀 */
+        .rank-3 { color: #a0522d; background-color: #faf0e6; } /* 銅 */
+    </style>
+</head>
+<body>
+
+    <h1>🐎 10頭立て白熱WEBレース 🏁</h1>
+
+    <div class="controls">
+        <button id="start-btn" onclick="startRace()">レース開始</button>
+        <button id="reset-btn" onclick="resetRace()" style="display: none; background-color: #34495e;">もう一度遊ぶ</button>
+    </div>
+
+    <div class="track-container">
+        <div class="goal-line"></div>
+        <div id="track"></div>
+    </div>
+
+    <div id="result-board" class="result-board">
+        <h2>🏆 レース結果 🏆</h2>
+        <ul class="rank-list" id="rank-list"></ul>
+    </div>
+
+    <script>
+        const horseCount = 10;
+        const startPosition = 45; // 馬の初期位置(px)
+        // トラック幅(800px) - ゴール位置(60px) - 馬のサイズ分(約40px) ＝ 実質ゴール判定位置(約700px)
+        const goalPosition = 700; 
+        
+        let raceInterval;
+        let isRacing = false;
+        let horsePositions = Array(horseCount).fill(startPosition);
+
+        // 画面が読み込まれたらトラック（レーンと馬）を準備
+        window.onload = function() {
+            createTrack();
+        };
+
+        // トラックの生成
+        function createTrack() {
+            const track = document.getElementById('track');
+            track.innerHTML = '';
+            for (let i = 0; i < horseCount; i++) {
+                const lane = document.createElement('div');
+                lane.className = 'lane';
+                
+                // レーン番号
+                const number = document.createElement('div');
+                number.className = 'lane-number';
+                number.innerText = `${i + 1}番`;
+                
+                // 馬（絵文字）
+                const horse = document.createElement('div');
+                horse.className = 'horse';
+                horse.id = `horse-${i}`;
+                horse.style.left = `${startPosition}px`;
+                horse.innerText = '🐎';
+                
+                lane.appendChild(number);
+                lane.appendChild(horse);
+                track.appendChild(lane);
+            }
+        }
+
+        // レース開始
+        function startRace() {
+            if (isRacing) return;
+            isRacing = true;
+            
+            // ボタンの制御
+            document.getElementById('start-btn').disabled = true;
+            document.getElementById('reset-btn').style.display = 'none';
+            document.getElementById('result-board').style.display = 'none';
+
+            // 約10秒（10000ms）でゴールさせるための調整
+            // 100ms（0.1秒）ごとにループを回す（合計約100回実行される想定）
+            // 700px ÷ 100回 ＝ 1回の平均前進スピードを「約7px」に設定
+            raceInterval = setInterval(() => {
+                let winners = [];
+
+                for (let i = 0; i < horseCount; i++) {
+                    // 抜きつ抜かれつを演出するため、0〜15pxの間でランダムに前進（平均7.5px）
+                    const step = Math.random() * 15; 
+                    horsePositions[i] += step;
+
+                    // 画面上の馬の位置を更新
+                    const horseElement = document.getElementById(`horse-${i}`);
+                    if (horseElement) {
+                        horseElement.style.left = `${horsePositions[i]}px`;
+                    }
+
+                    // ゴール判定
+                    if (horsePositions[i] >= goalPosition) {
+                        winners.push({ id: i + 1, pos: horsePositions[i] });
+                    }
+                }
+
+                // ゴールした馬がいる場合、レース終了処理へ
+                if (winners.length > 0) {
+                    clearInterval(raceInterval);
+                    endRace();
+                }
+            }, 100); // 0.1秒ごとに更新
+        }
+
+        // レース終了・結果判定
+        function endRace() {
+            isRacing = false;
+            
+            // 現在の全馬の位置を元に、最終順位をソート（降順）
+            const finalResults = horsePositions.map((pos, index) => {
+                return { id: index + 1, position: pos };
+            });
+            finalResults.sort((a, b) => b.position - a.position);
+
+            // 結果の表示
+            const rankList = document.getElementById('rank-list');
+            rankList.innerHTML = '';
+
+            const rankMedals = ['rank-1', 'rank-2', 'rank-3'];
+            const rankNames = ['1着', '2着', '3着'];
+
+            for (let i = 0; i < 3; i++) {
+                const li = document.createElement('li');
+                li.className = rankMedals[i];
+                li.innerText = `${rankNames[i]}： ${finalResults[i].id}番の馬 🐎`;
+                rankList.appendChild(li);
+            }
+
+            // ボードとリセットボタンを表示
+            document.getElementById('result-board').style.display = 'block';
+            document.getElementById('reset-btn').style.display = 'inline-block';
+        }
+
+        // リセット処理
+        function resetRace() {
+            if (isRacing) return;
+            
+            // 位置の初期化
+            horsePositions = Array(horseCount).fill(startPosition);
+            
+            // 馬の見た目をスタート位置に戻す
+            for (let i = 0; i < horseCount; i++) {
+                const horseElement = document.getElementById(`horse-${i}`);
+                if (horseElement) {
+                    horseElement.style.left = `${startPosition}px`;
+                }
+            }
+
+            // UIの初期化
+            document.getElementById('start-btn').disabled = false;
+            document.getElementById('reset-btn').style.display = 'none';
+            document.getElementById('result-board').style.display = 'none';
+        }
+    </script>
+</body>
+</html>
